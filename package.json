@@ -1,5 +1,5 @@
 {
-  "name": "telegram-stock-bot",
+  "name": "telegram-stock-bot-v2",
   "version": "1.0.0",
   "description": "Telegram bot for American stock trading",
   "main": "index.js",
