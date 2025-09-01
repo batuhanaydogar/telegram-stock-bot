@@ -2,7 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const axios = require('axios');
+const yahooFinance = require('yahoo-finance2').default;
 require('dotenv').config();
 
 const app = express();
@@ -17,9 +17,8 @@ app.use(express.json());
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: false });
 
-// Stock API configuration (using Alpha Vantage as example)
-const STOCK_API_KEY = process.env.STOCK_API_KEY || 'demo';
-const STOCK_API_BASE = 'https://www.alphavantage.co/query';
+// Stock API configuration (using Yahoo Finance)
+// No API key required - completely free!
 
 // Bot commands and functionality
 const commands = {
@@ -27,8 +26,9 @@ const commands = {
   help: '/help - Yardım menüsü',
   price: '/price <symbol> - Hisse fiyatını öğren (örn: /price AAPL)',
   search: '/search <company> - Şirket ara (örn: /search Apple)',
+  chart: '/chart <symbol> - Hisse grafiği (örn: /chart AAPL)',
   portfolio: '/portfolio - Portföyünü görüntüle',
-  news: '/news - Güncel borsa haberleri'
+  news: '/news - Güncel borsa trendleri'
 };
 
 // Handle /start command
@@ -57,7 +57,8 @@ async function handleHelp(msg) {
   helpText += `\n💡 *Örnek Kullanım:*\n` +
     `• /price AAPL - Apple hisse fiyatı\n` +
     `• /search Tesla - Tesla şirket bilgisi\n` +
-    `• /news - Güncel haberler`;
+    `• /chart AAPL - Apple hisse grafiği\n` +
+    `• /news - Güncel borsa trendleri`;
   
   await bot.sendMessage(chatId, helpText, { parse_mode: 'Markdown' });
 }
@@ -76,27 +77,22 @@ async function handlePrice(msg) {
   try {
     await bot.sendMessage(chatId, `🔍 *${symbol.toUpperCase()}* hisse fiyatı aranıyor...`, { parse_mode: 'Markdown' });
     
-    const response = await axios.get(STOCK_API_BASE, {
-      params: {
-        function: 'GLOBAL_QUOTE',
-        symbol: symbol.toUpperCase(),
-        apikey: STOCK_API_KEY
-      }
-    });
+    const quote = await yahooFinance.quote(symbol.toUpperCase());
     
-    const data = response.data;
-    
-    if (data['Global Quote'] && data['Global Quote']['05. price']) {
-      const quote = data['Global Quote'];
-      const price = parseFloat(quote['05. price']).toFixed(2);
-      const change = parseFloat(quote['09. change']).toFixed(2);
-      const changePercent = quote['10. change percent'];
-      const volume = parseInt(quote['06. volume']).toLocaleString();
+    if (quote && quote.regularMarketPrice) {
+      const price = quote.regularMarketPrice.toFixed(2);
+      const change = quote.regularMarketChange.toFixed(2);
+      const changePercent = quote.regularMarketChangePercent.toFixed(2);
+      const volume = quote.regularMarketVolume.toLocaleString();
+      const marketCap = quote.marketCap ? (quote.marketCap / 1000000000).toFixed(2) + 'B' : 'N/A';
+      const pe = quote.trailingPE ? quote.trailingPE.toFixed(2) : 'N/A';
       
       const message = `📊 *${symbol.toUpperCase()} Hisse Bilgileri*\n\n` +
         `💰 **Fiyat:** $${price}\n` +
-        `📈 **Değişim:** $${change} (${changePercent})\n` +
+        `📈 **Değişim:** $${change} (${changePercent}%)\n` +
         `📊 **Hacim:** ${volume}\n` +
+        `🏢 **Piyasa Değeri:** $${marketCap}\n` +
+        `📊 **P/E Oranı:** ${pe}\n` +
         `🕐 **Güncelleme:** ${new Date().toLocaleString('tr-TR')}`;
       
       await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
@@ -123,22 +119,19 @@ async function handleSearch(msg) {
   try {
     await bot.sendMessage(chatId, `🔍 *${company}* şirketi aranıyor...`, { parse_mode: 'Markdown' });
     
-    const response = await axios.get(STOCK_API_BASE, {
-      params: {
-        function: 'SYMBOL_SEARCH',
-        keywords: company,
-        apikey: STOCK_API_KEY
-      }
-    });
+    const searchResults = await yahooFinance.search(company);
     
-    const data = response.data;
-    
-    if (data.bestMatches && data.bestMatches.length > 0) {
+    if (searchResults && searchResults.length > 0) {
       let message = `🔍 *${company} için bulunan sonuçlar:*\n\n`;
       
-      data.bestMatches.slice(0, 5).forEach((match, index) => {
-        message += `${index + 1}. **${match['1. symbol']}** - ${match['2. name']}\n`;
-        message += `   📍 ${match['4. region']} | 💼 ${match['3. type']}\n\n`;
+      searchResults.slice(0, 5).forEach((result, index) => {
+        const symbol = result.symbol || 'N/A';
+        const name = result.shortname || result.longname || 'N/A';
+        const exchange = result.exchange || 'N/A';
+        const type = result.quoteType || 'N/A';
+        
+        message += `${index + 1}. **${symbol}** - ${name}\n`;
+        message += `   📍 ${exchange} | 💼 ${type}\n\n`;
       });
       
       message += `💡 Fiyat bilgisi için: /price <sembol>`;
@@ -169,6 +162,57 @@ async function handlePortfolio(msg) {
   await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 }
 
+// Handle /chart command
+async function handleChart(msg) {
+  const chatId = msg.chat.id;
+  const text = msg.text;
+  const symbol = text.split(' ')[1];
+  
+  if (!symbol) {
+    await bot.sendMessage(chatId, '❌ Lütfen bir hisse sembolü belirtin.\nÖrnek: /chart AAPL');
+    return;
+  }
+  
+  try {
+    await bot.sendMessage(chatId, `📊 *${symbol.toUpperCase()}* hisse grafiği hazırlanıyor...`, { parse_mode: 'Markdown' });
+    
+    // Get historical data for the last 30 days
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    
+    const historicalData = await yahooFinance.historical(symbol.toUpperCase(), startDate, endDate, '1d');
+    
+    if (historicalData && historicalData.length > 0) {
+      const latest = historicalData[historicalData.length - 1];
+      const oldest = historicalData[0];
+      const change = (latest.close - oldest.close).toFixed(2);
+      const changePercent = ((change / oldest.close) * 100).toFixed(2);
+      
+      let message = `📈 *${symbol.toUpperCase()} 30 Günlük Grafik Analizi*\n\n`;
+      message += `💰 **Güncel Fiyat:** $${latest.close.toFixed(2)}\n`;
+      message += `📅 **Tarih:** ${latest.date.toLocaleDateString('tr-TR')}\n`;
+      message += `📊 **30 Günlük Değişim:** $${change} (${changePercent}%)\n`;
+      message += `📈 **En Yüksek:** $${Math.max(...historicalData.map(d => d.high)).toFixed(2)}\n`;
+      message += `📉 **En Düşük:** $${Math.min(...historicalData.map(d => d.low)).toFixed(2)}\n`;
+      message += `📊 **Ortalama Hacim:** ${(historicalData.reduce((sum, d) => sum + d.volume, 0) / historicalData.length).toLocaleString()}\n\n`;
+      
+      message += `🔗 **Grafik Görüntüle:** https://finance.yahoo.com/chart/${symbol.toUpperCase()}\n`;
+      message += `📱 **Detaylı Analiz:** https://finance.yahoo.com/quote/${symbol.toUpperCase()}`;
+      
+      await bot.sendMessage(chatId, message, { 
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true
+      });
+    } else {
+      await bot.sendMessage(chatId, `❌ ${symbol.toUpperCase()} için grafik verisi bulunamadı.`);
+    }
+  } catch (error) {
+    console.error('Chart API error:', error);
+    await bot.sendMessage(chatId, '❌ Grafik verisi alınırken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+  }
+}
+
 // Handle /news command
 async function handleNews(msg) {
   const chatId = msg.chat.id;
@@ -176,39 +220,35 @@ async function handleNews(msg) {
   try {
     await bot.sendMessage(chatId, `📰 *Borsa haberleri alınıyor...*`, { parse_mode: 'Markdown' });
     
-    // Using Alpha Vantage news API
-    const response = await axios.get(STOCK_API_BASE, {
-      params: {
-        function: 'NEWS_SENTIMENT',
-        topics: 'technology',
-        apikey: STOCK_API_KEY,
-        limit: 5
-      }
-    });
+    // Using Yahoo Finance trending tickers for market insights
+    const trendingTickers = await yahooFinance.trendingSymbols('US');
     
-    const data = response.data;
-    
-    if (data.feed && data.feed.length > 0) {
-      let message = `📰 *Güncel Borsa Haberleri*\n\n`;
+    if (trendingTickers && trendingTickers.length > 0) {
+      let message = `🔥 *Güncel Borsa Trendleri (US)*\n\n`;
       
-      data.feed.slice(0, 3).forEach((news, index) => {
-        message += `${index + 1}. **${news.title}**\n`;
-        message += `   📅 ${new Date(news.time_published).toLocaleDateString('tr-TR')}\n`;
-        message += `   🔗 [Detaylar](${news.url})\n\n`;
+      trendingTickers.slice(0, 5).forEach((ticker, index) => {
+        const symbol = ticker.symbol || 'N/A';
+        const name = ticker.shortname || ticker.longname || 'N/A';
+        const price = ticker.regularMarketPrice ? `$${ticker.regularMarketPrice.toFixed(2)}` : 'N/A';
+        const change = ticker.regularMarketChange ? `${ticker.regularMarketChange > 0 ? '📈' : '📉'} ${ticker.regularMarketChange.toFixed(2)}` : 'N/A';
+        
+        message += `${index + 1}. **${symbol}** - ${name}\n`;
+        message += `   💰 ${price} | ${change}\n\n`;
       });
       
-      message += `📊 Daha fazla haber için: https://finance.yahoo.com/news/`;
+      message += `📊 Detaylı bilgi için: /price <sembol>\n`;
+      message += `🌐 Daha fazla haber: https://finance.yahoo.com/news/`;
       
       await bot.sendMessage(chatId, message, { 
         parse_mode: 'Markdown',
         disable_web_page_preview: true
       });
     } else {
-      await bot.sendMessage(chatId, `❌ Haber verisi alınamadı. Lütfen daha sonra tekrar deneyin.`);
+      await bot.sendMessage(chatId, `❌ Trend verisi alınamadı. Lütfen daha sonra tekrar deneyin.`);
     }
   } catch (error) {
     console.error('News API error:', error);
-    await bot.sendMessage(chatId, '❌ Haberler alınırken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+    await bot.sendMessage(chatId, '❌ Trend verisi alınırken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
   }
 }
 
@@ -231,6 +271,8 @@ async function handleMessage(msg) {
       await handlePortfolio(msg);
     } else if (text === '/news') {
       await handleNews(msg);
+    } else if (text.startsWith('/chart')) {
+      await handleChart(msg);
     } else if (text.startsWith('/')) {
       await bot.sendMessage(msg.chat.id, '❌ Bilinmeyen komut. Yardım için /help yazın.');
     }

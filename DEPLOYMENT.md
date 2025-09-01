@@ -5,7 +5,7 @@
 1. **GitHub Hesabı** - Projeyi GitHub'a push etmek için
 2. **Vercel Hesabı** - [vercel.com](https://vercel.com) üzerinden ücretsiz hesap
 3. **Telegram Bot Token** - @BotFather'dan alınacak
-4. **Alpha Vantage API Key** - [alphavantage.co](https://www.alphavantage.co) üzerinden ücretsiz
+4. **Yahoo Finance API** - ✅ Ücretsiz! API key gerektirmez
 
 ## 🔧 Adım Adım Deployment
 
@@ -35,7 +35,7 @@ Vercel dashboard'da şu environment variables'ları ekleyin:
 
 ```bash
 TELEGRAM_BOT_TOKEN=your_bot_token_here
-STOCK_API_KEY=your_alpha_vantage_key_here
+# STOCK_API_KEY=not_needed (Yahoo Finance ücretsiz!)
 NODE_ENV=production
 ```
 

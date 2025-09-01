@@ -25,11 +25,12 @@ Bu Telegram bot, Amerikan borsasındaki hisse senetlerini takip etmenizi, fiyat 
 3. Bot adı ve kullanıcı adı belirleyin
 4. Bot token'ını kaydedin
 
-### 3. Alpha Vantage API Key
+### 3. Yahoo Finance API
 
-1. [Alpha Vantage](https://www.alphavantage.co/support/#api-key) sitesine gidin
-2. Ücretsiz hesap oluşturun
-3. API key alın
+✅ **Ücretsiz!** - API key gerektirmez
+✅ **Gerçek zamanlı veriler** - Anlık hisse fiyatları
+✅ **Sınırsız kullanım** - Rate limit yok
+✅ **Detaylı bilgiler** - Piyasa değeri, P/E oranı, grafik verileri
 
 ### 4. Yerel Kurulum
 
@@ -67,7 +68,7 @@ vercel --prod
 ```bash
 # .env dosyasında
 TELEGRAM_BOT_TOKEN=your_bot_token
-STOCK_API_KEY=your_alpha_vantage_key
+# STOCK_API_KEY=not_needed (Yahoo Finance ücretsiz!)
 NODE_ENV=production
 ```
 
@@ -87,8 +88,9 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
 - `/help` - Yardım menüsü
 - `/price <symbol>` - Hisse fiyatını öğren (örn: `/price AAPL`)
 - `/search <company>` - Şirket ara (örn: `/search Apple`)
+- `/chart <symbol>` - Hisse grafiği (örn: `/chart AAPL`)
 - `/portfolio` - Portföyünü görüntüle
-- `/news` - Güncel borsa haberleri
+- `/news` - Güncel borsa trendleri
 
 ## 🌐 API Endpoints
 
@@ -115,9 +117,11 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
 ## 📊 Hisse Verileri
 
 Bot şu bilgileri sağlar:
-- Güncel fiyat
-- Günlük değişim
-- İşlem hacmi
+- Güncel fiyat ve değişim
+- Piyasa değeri ve P/E oranı
+- İşlem hacmi ve trend analizi
+- 30 günlük grafik verileri
+- En yüksek/düşük fiyatlar
 - Güncelleme zamanı
 
 ## 🔒 Güvenlik
